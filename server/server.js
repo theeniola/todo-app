@@ -14,28 +14,29 @@ const PORT = process.env.PORT || 5000;
 const KEY_VAULT_NAME = process.env.KEY_VAULT_NAME;
 const keyVaultUrl = `https://${KEY_VAULT_NAME}.vault.azure.net`;
 
-// Azure Identity for local dev or managed identity
-const credential = new DefaultAzureCredential();
-const secretClient = new SecretClient(keyVaultUrl, credential);
+async function getMongoUriFromKeyVault() {
+  const credential = new DefaultAzureCredential();
+  const secretClient = new SecretClient(keyVaultUrl, credential);
+  const secret = await secretClient.getSecret("MONGO_URI");
+  return secret.value;
+}
 
 async function startServer() {
   try {
-    // Get Mongo URI from Azure Key Vault
-    const mongoUriSecret = await secretClient.getSecret("MONGO_URI");
-    const mongoUri = mongoUriSecret.value;
+    const mongoUri = process.env.MONGO_URI || (await getMongoUriFromKeyVault());
 
-    // Connect to Cosmos DB
     await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
+
     console.log("✅ Connected to Cosmos DB (MongoDB API)");
 
-    // Register Routes
+    // Register routes
     const taskRoutes = require("./routes/tasks");
     app.use("/api/tasks", taskRoutes);
 
-    // Serve React frontend in production
+    // Serve frontend in production
     if (process.env.NODE_ENV === "production") {
       app.use(express.static(path.join(__dirname, "../todo-client/build")));
       app.get("*", (req, res) =>
@@ -43,10 +44,9 @@ async function startServer() {
       );
     }
 
-    // Start Server
     app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-  } catch (error) {
-    console.error("❌ Server startup failed:", error.message);
+  } catch (err) {
+    console.error("❌ Error starting server:", err.message);
   }
 }
 
