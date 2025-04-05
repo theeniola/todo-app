@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const path = require("path");
 const { DefaultAzureCredential } = require("@azure/identity");
 const { SecretClient } = require("@azure/keyvault-secrets");
 
@@ -9,46 +10,43 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const port = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
+const KEY_VAULT_NAME = process.env.KEY_VAULT_NAME;
+const keyVaultUrl = `https://${KEY_VAULT_NAME}.vault.azure.net`;
 
-// Key Vault setup
-const vaultName = process.env.KEY_VAULT_NAME;
-const url = `https://${vaultName}.vault.azure.net`;
+// Azure Identity for local dev or managed identity
 const credential = new DefaultAzureCredential();
-const client = new SecretClient(url, credential);
+const secretClient = new SecretClient(keyVaultUrl, credential);
 
 async function startServer() {
   try {
-    // Get Cosmos DB connection string securely from Azure Key Vault
-    const mongoSecret = await client.getSecret("MONGO_URI");
+    // Get Mongo URI from Azure Key Vault
+    const mongoUriSecret = await secretClient.getSecret("MONGO_URI");
+    const mongoUri = mongoUriSecret.value;
 
-    await mongoose.connect(mongoSecret.value, {
+    // Connect to Cosmos DB
+    await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
+    console.log("✅ Connected to Cosmos DB (MongoDB API)");
 
-    console.log("✅ Connected to Cosmos DB");
-
-    // Routes
+    // Register Routes
     const taskRoutes = require("./routes/tasks");
     app.use("/api/tasks", taskRoutes);
 
-    const path = require("path");
-
+    // Serve React frontend in production
     if (process.env.NODE_ENV === "production") {
-      app.use(express.static(path.join(__dirname, "../client/build")));
-
-      app.get("*", (req, res) => {
-        res.sendFile(path.join(__dirname, "../client/build", "index.html"));
-      });
+      app.use(express.static(path.join(__dirname, "../todo-client/build")));
+      app.get("*", (req, res) =>
+        res.sendFile(path.join(__dirname, "../todo-client/build", "index.html"))
+      );
     }
 
-    // Start server
-    app.listen(port, () => {
-      console.log(`🚀 Server running on port ${port}`);
-    });
+    // Start Server
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   } catch (error) {
-    console.error("❌ Server failed to start:", error.message);
+    console.error("❌ Server startup failed:", error.message);
   }
 }
 

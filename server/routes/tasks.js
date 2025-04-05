@@ -4,7 +4,7 @@ const router = express.Router();
 const Task = require("../models/Task");
 const TaskDone = require("../models/TaskDone");
 
-// ➕ Create a new task
+// ➕ Create a Task
 router.post("/", async (req, res) => {
   try {
     const newTask = new Task(req.body);
@@ -15,18 +15,18 @@ router.post("/", async (req, res) => {
   }
 });
 
-// 📥 Get all tasks for a user
+// 📥 Get Tasks for a User
 router.get("/", async (req, res) => {
   try {
-    const { user } = req.query;
-    const tasks = await Task.find({ userEmail: user });
+    const userEmail = req.query.user;
+    const tasks = await Task.find({ userEmail });
     res.json(tasks);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ✏️ Update a task by ID
+// ✏️ Update Task (Mark Complete)
 router.put("/:id", async (req, res) => {
   try {
     const updated = await Task.findByIdAndUpdate(req.params.id, req.body, {
@@ -38,21 +38,20 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// 🗑 Delete a task (move to task_done)
+// 🗑 Delete Task (Move to task_done)
 router.delete("/:id", async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).send("Task not found");
 
-    const done = new TaskDone({
+    const taskDone = new TaskDone({
       ...task._doc,
       completedAt: new Date(),
     });
 
-    await done.save();
+    await taskDone.save();
     await task.remove();
-
-    res.send("Moved to task_done");
+    res.send("Task moved to 'task_done'");
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
